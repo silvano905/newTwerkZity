@@ -1,12 +1,25 @@
 const User = require('../models/User');
 const PaymentIntent = require('../models/PaymentIntent')
-
 const squareConnect = require('square-connect');
 const crypto = require('crypto');
 require('dotenv').config();
 
 const stripe = require('stripe')(process.env.stripeAccess);
 
+async function addWinners(days, user) {
+    const addDays = (date, days) =>{
+        let result = new Date(date);
+        result.setDate(result.getDate() + days);
+        return result;
+    }
+    let expires = addDays(Date.now(), days)
+    let profile = await User.findOneAndUpdate(
+        { _id: user },
+        { $set: {paid : true, subscription: expires} },
+        { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+    await profile.save()
+}
 
 module.exports.post_create_payment_intent = async (req, res) => {
     try {
@@ -15,6 +28,7 @@ module.exports.post_create_payment_intent = async (req, res) => {
         const newPaymentIntent = new PaymentIntent({
             user: user,
             price: req.body.price,
+            days: req.body.days,
         });
         const savenewPaymentIntent = await newPaymentIntent.save();
         //end code
@@ -54,7 +68,7 @@ defaultClient.basePath = 'https://connect.squareupsandbox.com';
 
 module.exports.post_payment_square= async (req, res) =>{
     const request_params = req.body;
-    const userPaymentPrice = await PaymentIntent.findOne({user: req.user}).sort({ date: -1 });
+    const userPaymentIntent = await PaymentIntent.findOne({user: req.user}).sort({ date: -1 });
     // length of idempotency_key should be less than 45
     const idempotency_key = crypto.randomBytes(22).toString('hex');
 
@@ -63,7 +77,7 @@ module.exports.post_payment_square= async (req, res) =>{
     const request_body = {
         source_id: request_params.nonce,
         amount_money: {
-            amount: userPaymentPrice.price * 100, // £1.00 charge
+            amount: userPaymentIntent.price * 100, // £1.00 charge
             currency: 'USD'
         },
         idempotency_key: idempotency_key
@@ -71,11 +85,12 @@ module.exports.post_payment_square= async (req, res) =>{
 
     try {
         const response = await payments_api.createPayment(request_body);
-        await User.findOneAndUpdate(
-            { _id: req.user },
-            { $set: {paid: true} },
-            { new: true, upsert: true, setDefaultsOnInsert: true }
-        );
+        // await User.findOneAndUpdate(
+        //     { _id: req.user },
+        //     { $set: {paid: true} },
+        //     { new: true, upsert: true, setDefaultsOnInsert: true }
+        // );
+        await addWinners(parseInt(userPaymentIntent.days), req.user)
         res.status(200).json({
             'title': 'Payment Successful',
             'result': response

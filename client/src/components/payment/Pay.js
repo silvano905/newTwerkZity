@@ -93,6 +93,10 @@ const Pay = (props) => {
     const {user, isAuthenticated} = useSelector(state => state.auth);
 
     const dispatch = useDispatch()
+    useEffect(() => {
+        //get all todos
+        dispatch(addPaymentIntent({price: props.location.state.price, days: props.location.state.days}))
+    }, []);
 
     if(isAuthenticated) {
         if (user.paid) {

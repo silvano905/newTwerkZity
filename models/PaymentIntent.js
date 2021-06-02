@@ -10,6 +10,10 @@ const PaymentIntent = new Schema({
         type: String,
         required: true
     },
+    days: {
+        type: String,
+        required: true
+    },
     date: {
         type: Date,
         default: Date.now
